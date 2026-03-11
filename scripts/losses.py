@@ -3,6 +3,48 @@ import torch.nn as nn
 import torch.nn.functional as F
 from math import exp
 
+
+##########################################################################
+## 论文创新：掩码引导的语义区域损失
+class MaskedSemanticLoss(nn.Module):
+    def __init__(self):
+        super(MaskedSemanticLoss, self).__init__()
+
+    # 🔴 核心统一：严格使用 YCbCr 的 Y 通道公式提取亮度
+    def extract_Y(self, image):
+        r = image[:, 0:1, :, :]
+        g = image[:, 1:2, :, :]
+        b = image[:, 2:3, :, :]
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
+    def forward(self, fused_img, ir_img, vis_img, target_mask, task_type=None):
+        if target_mask.dim() == 3:
+            target_mask = target_mask.unsqueeze(1)
+
+        background_mask = 1 - target_mask
+
+        # 全部使用统一的 Y 通道
+        fused_Y = self.extract_Y(fused_img)
+        ir_Y = self.extract_Y(ir_img)
+        vis_Y = self.extract_Y(vis_img)
+
+        # 理想亮度目标
+        ideal_target = torch.max(ir_Y, vis_Y)
+
+        if task_type == 'enhance_vehicle':
+            # 强行提亮 0.5 (只作用于 Y 亮度通道，不伤颜色)
+            ideal_target = torch.clamp(ideal_target + target_mask * 0.5, 0.0, 1.0)
+        elif task_type == 'enhance_person':
+            ideal_target = ir_Y
+        else:
+            ideal_target = torch.max(ir_Y, vis_Y)
+
+        loss_target = torch.mean(target_mask * torch.abs(fused_Y - ideal_target))
+        loss_background = torch.mean(background_mask * torch.abs(fused_Y - vis_Y))
+
+        return loss_target + loss_background
+
+
 class fusion_loss(nn.Module):
     def __init__(self):
         super(fusion_loss, self).__init__()
@@ -10,17 +52,30 @@ class fusion_loss(nn.Module):
         self.loss_func_Grad = L_Grad_position()
         self.loss_func_Max = L_Intensity()
         self.loss_func_color = L_color()
+        self.loss_func_semantic = MaskedSemanticLoss()
 
-    def forward(self, image_visible, image_infrared, image_fused, max_ratio=4, ssim_vis_ratio=1, ssim_ir_ratio=1, ssim_ratio=1, color_ratio=12, text_ratio=10):
+    # 🔴 接收 task_type 传给底层
+    def forward(self, image_visible, image_infrared, image_fused,
+                max_ratio=4, ssim_vis_ratio=1, ssim_ir_ratio=1,
+                ssim_ratio=1, color_ratio=20, text_ratio=10, 
+                mask=None, semantic_ratio=10.0, task_type=None):
+                
         image_visible_gray = self.rgb2gray(image_visible)
         image_infrared_gray = self.rgb2gray(image_infrared)
         image_fused_gray = self.rgb2gray(image_fused)
+
         loss_max = max_ratio * self.loss_func_Max(image_visible, image_infrared, image_fused)
         loss_ssim = ssim_ratio * (ssim_vis_ratio * self.loss_func_ssim(image_visible, image_fused) + ssim_ir_ratio * self.loss_func_ssim(image_infrared_gray, image_fused_gray))
         loss_color = color_ratio * self.loss_func_color(image_visible, image_fused)
         loss_text = text_ratio * self.loss_func_Grad(image_visible_gray, image_infrared_gray, image_fused_gray)
-        total_loss = loss_max + loss_ssim + loss_color + loss_text
-        return total_loss, loss_ssim, loss_max, loss_color, loss_text
+
+        loss_semantic = 0
+        if mask is not None:
+            # 🔴 把 task_type 喂给语义 Loss
+            loss_semantic = semantic_ratio * self.loss_func_semantic(image_fused, image_infrared, image_visible, mask, task_type)
+
+        total_loss = loss_max + loss_ssim + loss_color + loss_text + loss_semantic
+        return total_loss, loss_ssim, loss_max, loss_color, loss_text, loss_semantic
 
     def rgb2gray(self, image):
         b, c, h, w = image.size()
@@ -35,12 +90,14 @@ class fusion_prompt_loss(nn.Module):
         super(fusion_prompt_loss, self).__init__()
         self.fusion_loss = fusion_loss()
 
-    def forward(self, image_A, image_B, image_fused, task):
+    def forward(self, image_A, image_B, image_fused, task, mask=None):
+        """新增参数: mask - 语义分割掩码（可选）"""
         total_loss = 0
         total_ssim_loss = 0
         total_max_loss = 0
         total_color_loss = 0
         total_grad_loss = 0
+        total_semantic_loss = 0
 
         num_tasks = len(task)
 
@@ -49,18 +106,31 @@ class fusion_prompt_loss(nn.Module):
             img_B = self._get_image(image_B, idx)
             img_fused = self._get_image(image_fused, idx)
 
+            # 获取当前样本的mask（如果有）
+            img_mask = None
+            if mask is not None:
+                img_mask = self._get_image(mask, idx)
+
+            # 使用语义mask时，优先使用mask引导的语义损失
+            # 同时保留原有的参数配置
             if task_type == "low_light":
-                loss, ssim_loss, max_loss, color_loss, grad_loss = self.fusion_loss(img_A, img_B, img_fused,
-                                                                                    max_ratio=8, ssim_ratio=1, text_ratio=10)
+                loss, ssim_loss, max_loss, color_loss, grad_loss, semantic_loss = self.fusion_loss(img_A, img_B, img_fused,
+                                                                                    max_ratio=8, ssim_ratio=1, text_ratio=10, mask=img_mask)
             elif task_type == "over_exposure":
-                loss, ssim_loss, max_loss, color_loss, grad_loss = self.fusion_loss(img_A, img_B, img_fused,
-                                                                                    max_ratio=4, ssim_ratio=0, text_ratio=2)
+                loss, ssim_loss, max_loss, color_loss, grad_loss, semantic_loss = self.fusion_loss(img_A, img_B, img_fused,
+                                                                                    max_ratio=4, ssim_ratio=0, text_ratio=2, mask=img_mask)
             elif task_type == "ir_low_contrast":
-                loss, ssim_loss, max_loss, color_loss, grad_loss = self.fusion_loss(img_A, img_B, img_fused,
-                                                                                    max_ratio=8, ssim_ratio=1, text_ratio=10)
+                loss, ssim_loss, max_loss, color_loss, grad_loss, semantic_loss = self.fusion_loss(img_A, img_B, img_fused,
+                                                                                    max_ratio=8, ssim_ratio=1, text_ratio=10, mask=img_mask)
             elif task_type == "ir_noise":
-                loss, ssim_loss, max_loss, color_loss, grad_loss = self.fusion_loss(img_A, img_B, img_fused,
-                                                                                    max_ratio=6, ssim_ratio=1, text_ratio=10)
+                loss, ssim_loss, max_loss, color_loss, grad_loss, semantic_loss = self.fusion_loss(img_A, img_B, img_fused,
+                                                                                    max_ratio=6, ssim_ratio=1, text_ratio=10, mask=img_mask)
+            if task_type in ["enhance_person", "enhance_vehicle", "enhance_background"]:
+                # 🔴 必须将 task_type 作为参数传进去！
+                loss, ssim_loss, max_loss, color_loss, grad_loss, semantic_loss = self.fusion_loss(
+                    img_A, img_B, img_fused,
+                    max_ratio=6, ssim_ratio=1, text_ratio=10, mask=img_mask, task_type=task_type
+                )
             else:
                 raise ValueError(f"Unknown task type: {task_type}")
 
@@ -69,9 +139,10 @@ class fusion_prompt_loss(nn.Module):
             total_max_loss += max_loss
             total_color_loss += color_loss
             total_grad_loss += grad_loss
+            total_semantic_loss += semantic_loss
 
         # Calculate the average for each loss component
-        return total_loss / num_tasks, total_ssim_loss / num_tasks, total_max_loss / num_tasks, total_color_loss / num_tasks, total_grad_loss / num_tasks,
+        return total_loss / num_tasks, total_ssim_loss / num_tasks, total_max_loss / num_tasks, total_color_loss / num_tasks, total_grad_loss / num_tasks, total_semantic_loss / num_tasks
 
     @staticmethod
     def _get_image(images, index):
@@ -112,14 +183,25 @@ class L_Intensity(nn.Module):
     def __init__(self):
         super(L_Intensity, self).__init__()
 
+    # 🔴 核心统一：必须和上面的 extract_Y 一模一样！绝对不能再用 mean！
+    def extract_Y(self, image):
+        r = image[:, 0:1, :, :]
+        g = image[:, 1:2, :, :]
+        b = image[:, 2:3, :, :]
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
     def forward(self, image_visible, image_infrared, image_fused):
-        gray_visible = torch.mean(image_visible, dim=1, keepdim=True)
-        gray_infrared = torch.mean(image_infrared, dim=1, keepdim=True)
+        gray_visible = self.extract_Y(image_visible)
+        gray_infrared = self.extract_Y(image_infrared)
+        gray_fused = self.extract_Y(image_fused)
 
         mask = (gray_infrared > gray_visible).float()
 
-        fused_image = mask * image_infrared + (1 - mask) * image_visible
-        Loss_intensity = F.l1_loss(fused_image, image_fused)
+        # 伪标签也变成了严谨的 Y 通道图
+        fused_target_gray = mask * gray_infrared + (1 - mask) * gray_visible
+        
+        # 算亮度 L1 loss，彻底告别颜色冲突
+        Loss_intensity = F.l1_loss(fused_target_gray, gray_fused)
         return Loss_intensity
 
 # Use it only if you have a consistent modal preference
@@ -279,3 +361,4 @@ class L_SSIM(torch.nn.Module):
             self.channel = channel
 
         return ssim(img1, img2, window=window, window_size=self.window_size, size_average=self.size_average)
+

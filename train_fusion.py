@@ -137,7 +137,7 @@ def main(args):
 
     for epoch in range(start_epoch, args.epochs):
         # train
-        train_loss, train_ssim_loss, train_max_loss, train_color_loss, train_text_loss, lr = train_one_epoch(model=model,
+        train_loss, train_ssim_loss, train_max_loss, train_color_loss, train_text_loss, train_semantic_loss, lr = train_one_epoch(model=model,
                                               model_clip=model_clip,
                                                 optimizer=optimizer,
                                                 data_loader=train_loader,
@@ -152,7 +152,7 @@ def main(args):
         tb_writer.add_scalar("train_text_loss", train_text_loss, epoch)
 
         if epoch % args.val_every_epcho == 0 and epoch != 0:
-            val_loss, val_ssim_loss, val_max_loss, val_color_loss, val_text_loss = evaluate(model=model,
+            val_loss, val_ssim_loss, val_max_loss, val_color_loss, val_text_loss, val_semantic_loss = evaluate(model=model,
                                          data_loader=val_loader,
                                          device=device,
                                          epoch=epoch, lr=lr, filefold_path=file_img_path)

@@ -150,6 +150,7 @@ def train_one_epoch(model, model_clip, optimizer, lr_scheduler, data_loader, dev
     accu_max_loss = torch.zeros(1).to(device)
     accu_color_loss = torch.zeros(1).to(device)
     accu_text_loss = torch.zeros(1).to(device)
+    accu_semantic_loss = torch.zeros(1).to(device)
 
     optimizer.zero_grad()
 
@@ -180,7 +181,7 @@ def train_one_epoch(model, model_clip, optimizer, lr_scheduler, data_loader, dev
 
         I_fused = model(I_A, I_B, text)
 
-        loss, loss_ssim, loss_max, loss_color, loss_text = loss_function_prompt(I_A_gt, I_B_gt, I_fused, task)
+        loss, loss_ssim, loss_max, loss_color, loss_text, loss_semantic = loss_function_prompt(I_A_gt, I_B_gt, I_fused, task)
 
         loss.backward()
 
@@ -189,11 +190,12 @@ def train_one_epoch(model, model_clip, optimizer, lr_scheduler, data_loader, dev
         accu_max_loss += loss_max.detach()
         accu_color_loss += loss_color.detach()
         accu_text_loss += loss_text.detach()
+        accu_semantic_loss += loss_semantic.detach()
 
         lr = optimizer.param_groups[0]["lr"]
 
-        data_loader.desc = "[train epoch {}] loss: {:.3f}  ssim loss: {:.3f}  max loss: {:.3f}  color loss: {:.3f}  text loss: {:.3f}  lr: {:.6f}".format(epoch, accu_total_loss.item() / (step + 1),
-            accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), lr)
+        data_loader.desc = "[train epoch {}] loss: {:.3f}  ssim loss: {:.3f}  max loss: {:.3f}  color loss: {:.3f}  text loss: {:.3f}  semantic loss: {:.3f}  lr: {:.6f}".format(epoch, accu_total_loss.item() / (step + 1),
+            accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), accu_semantic_loss.item() / (step + 1), lr)
 
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
@@ -203,7 +205,7 @@ def train_one_epoch(model, model_clip, optimizer, lr_scheduler, data_loader, dev
         lr_scheduler.step()
         optimizer.zero_grad()
 
-    return accu_total_loss.item() / (step + 1), accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), lr
+    return accu_total_loss.item() / (step + 1), accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), accu_semantic_loss.item() / (step + 1), lr
 
 
 @torch.no_grad()
@@ -216,6 +218,7 @@ def evaluate(model, data_loader, device, epoch, lr, filefold_path):
     accu_max_loss = torch.zeros(1).to(device)
     accu_color_loss = torch.zeros(1).to(device)
     accu_text_loss = torch.zeros(1).to(device)
+    accu_semantic_loss = torch.zeros(1).to(device)
     save_epoch = 1
     save_length = 60
     cnt = 0
@@ -267,18 +270,19 @@ def evaluate(model, data_loader, device, epoch, lr, filefold_path):
                     save_pic(img_ir, evalfold_path, str(name[0]) + "ir")
                 cnt += 1
 
-        loss, loss_ssim, loss_max, loss_color, loss_text = loss_function_prompt(I_A_gt, I_B_gt, I_fused, task)
+        loss, loss_ssim, loss_max, loss_color, loss_text, loss_semantic = loss_function_prompt(I_A_gt, I_B_gt, I_fused, task)
 
         accu_total_loss += loss
         accu_ssim_loss += loss_ssim.detach()
         accu_max_loss += loss_max.detach()
         accu_color_loss += loss_color.detach()
         accu_text_loss += loss_text
+        accu_semantic_loss += loss_semantic
 
-        data_loader.desc = "[val epoch {}] loss: {:.3f}  ssim loss: {:.3f}  max loss: {:.3f}  color loss: {:.3f}  text loss: {:.3f}  lr: {:.6f}".format(epoch, accu_total_loss.item() / (step + 1),
-            accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), lr)
+        data_loader.desc = "[val epoch {}] loss: {:.3f}  ssim loss: {:.3f}  max loss: {:.3f}  color loss: {:.3f}  text loss: {:.3f}  semantic loss: {:.3f}  lr: {:.6f}".format(epoch, accu_total_loss.item() / (step + 1),
+            accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), accu_semantic_loss.item() / (step + 1), lr)
 
-    return accu_total_loss.item() / (step + 1), accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1)
+    return accu_total_loss.item() / (step + 1), accu_ssim_loss.item() / (step + 1), accu_max_loss.item() / (step + 1), accu_color_loss.item() / (step + 1), accu_text_loss.item() / (step + 1), accu_semantic_loss.item() / (step + 1)
 
 def mergy_Y_RGB_to_YCbCr(img1, img2):
     Y_channel = img1.squeeze(0).cpu().numpy()

@@ -102,10 +102,10 @@ def save_pic(outputpic, path, index : str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_path', type=str, required=True, help='test data root path')
-    parser.add_argument('--weights_path', type=str, required=True, help='initial weights path')
-    parser.add_argument('--save_path', type=str, default='./results', help='output save image path')
-    parser.add_argument('--input_text', type=str, required=True, help='text control input')
+    parser.add_argument('--dataset_path', type=str, default='./dataset', help='test data root path')
+    parser.add_argument('--weights_path', type=str, default='./pretrained_weights/text_fusion.pth',help='initial weights path')
+    parser.add_argument('--save_path', type=str, default='./results_textIF', help='output save image path')
+    parser.add_argument('--input_text', type=str, default="This is the infrared and visible light image fusion task.",help='text control input')
 
     parser.add_argument('--device', default='cuda', help='device (i.e. cuda or cpu)')
     parser.add_argument('--gpu_id', default='0', help='device id (i.e. 0, 1, 2 or 3)')
