@@ -86,10 +86,10 @@ ax.set_title('Entropy (EN) Comparison\n(Higher is Better)', fontsize=16, fontwei
 
 # 设置坐标轴范围
 ax.set_xlim(0, num_pairs)
-ax.set_ylim(5.5, 7.6)
+ax.set_ylim(4, 10)
 
 # 添加图例
-ax.legend(loc='lower right', frameon=True, fancybox=True, shadow=True)
+ax.legend(loc='upper right', frameon=True, fancybox=True, shadow=True)
 
 # 添加网格
 ax.grid(True, linestyle='--', alpha=0.7)
