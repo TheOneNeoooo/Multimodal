@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python generate_plots.py)",
+      "Bash(python print_table.py)"
+    ]
+  }
+}
