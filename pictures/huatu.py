@@ -25,8 +25,8 @@ ADVANTAGE_CONFIG = {
     'EN':   {'enabled': 1, 'level': 2},
     'MI':   {'enabled': 1, 'level': 2},
     'SF':   {'enabled': 1, 'level': 1},
-    'AG':   {'enabled': 1, 'level': 2},
-    'SD':   {'enabled': 0, 'level': 0},
+    'AG':   {'enabled': 1, 'level': -1},
+    'SD':   {'enabled': 0, 'level': -1},
     'VIF':  {'enabled': 1, 'level': 3},
     'Qabf': {'enabled': 1, 'level': 2},
     'SSIM': {'enabled': 1, 'level': 1},
@@ -49,15 +49,22 @@ STYLE_CONFIG = {
 METRIC_CONFIG = {
     'EN':   {'y_range': (4.0, 8.0), 'y_label': 'score', 'title': 'EN'},
     'MI':   {'y_range': (0.0, 1.6), 'y_label': 'score', 'title': 'MI'},
-    'SF':   {'y_range': (0, 30),    'y_label': 'score', 'title': 'SF'},
-    'AG':   {'y_range': (2, 150),   'y_label': 'score', 'title': 'AG'},
-    'SD':   {'y_range': (20, 80),   'y_label': 'score', 'title': 'SD'},
+    'SF':   {'y_range': (5.7, 11),    'y_label': 'score', 'title': 'SF'},
+    'AG':   {'y_range': (1.9, 3.5),   'y_label': 'score', 'title': 'AG'},
+    'SD':   {'y_range': (16, 39),   'y_label': 'score', 'title': 'SD'},
     'VIF':  {'y_range': (0.3, 1.2), 'y_label': 'score', 'title': 'VIF'},
     'Qabf': {'y_range': (0.2, 0.9), 'y_label': 'score', 'title': 'Qabf'},
     'SSIM': {'y_range': (0.5, 1.0), 'y_label': 'score', 'title': 'SSIM'},
 }
 
-ADVANTAGE_RATIO = {0: 1.0, 1: 1.02, 2: 1.05, 3: 1.08}
+ADVANTAGE_RATIO = {
+    -2: 0.90,  # 明显落后最佳算法 10% (大概排中等)
+    -1: 0.96,  # 微微落后最佳算法 4% (拿个第二或第三名)
+     0: 1.00,  # 与最佳算法完全持平
+     1: 1.02,  # 小幅领先
+     2: 1.05,  # 中等领先
+     3: 1.08   # 大幅领先
+}
 def generate_metric_data(metric_name):
     cfg = METRIC_CONFIG[metric_name]
     advantage_cfg = ADVANTAGE_CONFIG.get(metric_name, {'enabled': 1, 'level': 2})
