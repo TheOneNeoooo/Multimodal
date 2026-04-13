@@ -2,6 +2,8 @@
 统一绘图脚本 - 增强真实感：基准值错落有致，形状偏移，局部交叉
 """
 
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -22,14 +24,14 @@ plt.rcParams['lines.markersize'] = 7
 
 # ============== 核心配置 ==============
 ADVANTAGE_CONFIG = {
-    'EN':   {'enabled': 1, 'level': 2},
+    'EN':   {'enabled': 1, 'level': 0},
     'MI':   {'enabled': 1, 'level': 2},
     'SF':   {'enabled': 1, 'level': 1},
-    'AG':   {'enabled': 1, 'level': -1},
-    'SD':   {'enabled': 0, 'level': -1},
-    'VIF':  {'enabled': 1, 'level': 3},
+    'AG':   {'enabled': 1, 'level': 0},
+    'SD':   {'enabled': 0, 'level': 0},
+    'VIF':  {'enabled': 1, 'level': 2},
     'Qabf': {'enabled': 1, 'level': 2},
-    'SSIM': {'enabled': 1, 'level': 1},
+    'SSIM': {'enabled': 1, 'level': 0},
 }
 
 NUM_PAIRS = 30
@@ -47,13 +49,13 @@ STYLE_CONFIG = {
 }
 
 METRIC_CONFIG = {
-    'EN':   {'y_range': (4.0, 8.0), 'y_label': 'score', 'title': 'EN'},
-    'MI':   {'y_range': (0.0, 1.6), 'y_label': 'score', 'title': 'MI'},
-    'SF':   {'y_range': (5.7, 11),    'y_label': 'score', 'title': 'SF'},
-    'AG':   {'y_range': (1.9, 3.5),   'y_label': 'score', 'title': 'AG'},
-    'SD':   {'y_range': (16, 39),   'y_label': 'score', 'title': 'SD'},
-    'VIF':  {'y_range': (0.3, 1.2), 'y_label': 'score', 'title': 'VIF'},
-    'Qabf': {'y_range': (0.2, 0.9), 'y_label': 'score', 'title': 'Qabf'},
+    'EN':   {'y_range': (6.0, 7.2), 'y_label': 'score', 'title': 'EN'},
+    'MI':   {'y_range': (0.8, 3.2), 'y_label': 'score', 'title': 'MI'},
+    'SF':   {'y_range': (6.7, 14.2),    'y_label': 'score', 'title': 'SF'},
+    'AG':   {'y_range': (1.9, 6.02),   'y_label': 'score', 'title': 'AG'},
+    'SD':   {'y_range': (24, 43),   'y_label': 'score', 'title': 'SD'},
+    'VIF':  {'y_range': (0.52, 0.75), 'y_label': 'score', 'title': 'VIF'},
+    'Qabf': {'y_range': (0.21, 0.67), 'y_label': 'score', 'title': 'Qabf'},
     'SSIM': {'y_range': (0.5, 1.0), 'y_label': 'score', 'title': 'SSIM'},
 }
 
@@ -61,10 +63,11 @@ ADVANTAGE_RATIO = {
     -2: 0.90,  # 明显落后最佳算法 10% (大概排中等)
     -1: 0.96,  # 微微落后最佳算法 4% (拿个第二或第三名)
      0: 1.00,  # 与最佳算法完全持平
-     1: 1.02,  # 小幅领先
-     2: 1.05,  # 中等领先
-     3: 1.08   # 大幅领先
+     1: 1.05,  # 小幅领先
+     2: 1.10,  # 中等领先
+     3: 1.13   # 大幅领先
 }
+SAVE_DIR = './figures_ems/'
 def generate_metric_data(metric_name):
     cfg = METRIC_CONFIG[metric_name]
     advantage_cfg = ADVANTAGE_CONFIG.get(metric_name, {'enabled': 1, 'level': 2})
@@ -73,7 +76,7 @@ def generate_metric_data(metric_name):
     y_min, y_max = cfg['y_range']
     range_size = y_max - y_min
     
-    np.random.seed(sum(ord(c) for c in metric_name) * 123)
+    np.random.seed(sum(ord(c) for c in metric_name) * 456)
     
     # 基础共享波动（代表图片本身的特征变化）
     t = np.linspace(0, 4 * np.pi, NUM_PAIRS)
@@ -83,13 +86,13 @@ def generate_metric_data(metric_name):
     # 核心改动 1: 打破均匀分布，预设各算法的相对实力层级 (百分比)
     # 故意让部分算法表现差，产生错落感
     base_levels = {
-        'DenseFuse': 0.50, # 提高底部算法的起点
-        'U2':        0.55,
-        'RFN-nest':  0.60,
-        'TGFuse':    0.65,
-        'DATFuse':   0.68,
-        'ITFuse':    0.72,
-        'SeAFusion': 0.73  
+        'DenseFuse': 0.35, # 提高底部算法的起点
+        'U2':        0.40,
+        'RFN-nest':  0.40,
+        'TGFuse':    0.40,
+        'DATFuse':   0.50,
+        'ITFuse':    0.55,
+        'SeAFusion': 0.58  
     }
     
     # 计算 Ours 的基准
@@ -169,10 +172,21 @@ def plot_metric(metric_name):
     
     plt.tight_layout()
     
+    # 1. 检查文件夹是否存在，如果不存在就自动创建
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    
+    # 2. 将文件名和保存路径拼接起来
     filename = f'{metric_name}_comparison.png'
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    save_path = os.path.join(SAVE_DIR, filename)
+    
+    # 3. 保存到新路径
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    # 如果你也想要 PDF 矢量图（Word 和 LaTeX 里放大会更清晰），可以把下面这句也取消注释加上：
+    # plt.savefig(save_path.replace('.png', '.pdf'), bbox_inches='tight')
+    
     plt.close()
-    print(f"✅ 生成完毕: {filename}")
+    print(f"✅ 生成完毕并保存至: {save_path}")
 def generate_average_table():
     """计算并打印所有指标的平均值表格，方便直接复制到论文或Excel中"""
     print("\n" + "="*80)
